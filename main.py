@@ -1,7 +1,10 @@
+from random import choice
+
 import pygame
 from pygame.locals import *
 from enum import IntEnum
 from math import sqrt
+
 
 def combine_lists(l1, l2, sign):
     l1 = list(l1)
@@ -25,6 +28,18 @@ def convert_to_grid(coordinates):
     return tuple([int((coordinates[i] - (coordinates[i] % grid_size)) / grid_size) for i in range(2)])
 
 
+def find_all_grid_coordinates(coordinates, dimensions):
+    start = convert_to_grid(coordinates)
+    end = convert_to_grid(combine_lists(combine_lists(coordinates, dimensions, '+'), (1, 1), '-'))
+    all_coordinates = []
+
+    for x in range(start[0], end[0] + 1):
+        for y in range(start[1], end[1] + 1):
+            all_coordinates.append((x, y))
+
+    return all_coordinates
+
+
 def opposite(n):
     return abs(n - 1)
 
@@ -33,6 +48,26 @@ def make_tuple(thing):
     if type(thing) not in (list, tuple):
         return (thing,)
     return thing
+
+
+def collision(c1, d1, c2, d2, inside_only=False):
+    d1 = list(d1)
+    d2 = list(d2)
+    collisions = [False, False]
+    for i in range(2):
+        d1[i] -= 1
+        d2[i] -= 1
+        if (c1[i] <= c2[i] and c1[i] + d1[i] >= c2[i] + d2[i]) or \
+                (c1[i] >= c2[i] and c1[i] + d1[i] <= c2[i] + d2[i]):
+            collisions[i] = True
+        if not inside_only:
+            if (c2[i] <= c1[i] <= c2[i] + d2[i]) or \
+                    (c2[i] <= c1[i] + d1[i] <= c2[i] + d2[i]):
+                collisions[i] = True
+    if False not in collisions:
+        return True
+    elif True in collisions:
+        return collisions.index(False)
 
 
 class SpriteSheet:
@@ -117,18 +152,21 @@ class Room:
         for x in range(self.map_sheet.get_width()):
             for y in range(self.map_sheet.get_height()):
                 tile_color = self.get_color((x, y))
+                print(tile_color)
                 if tile_color[3] == 255:
+                    print(1)
                     formatted_color = (tile_color[0], tile_color[1])
                     if formatted_color in room_tile_color_values:
                         block_type = room_tile_color_values[formatted_color]
                         tiles[(x, y)] = block_type
-                    elif formatted_color != (0, 0):
+                    else:
                         raise Exception("Unidentified block_color {0} at {1}".format(color, (x, y)))
 
         self.tiles = {}
         for initial_coordinates in tiles:
             tile_type = tiles[initial_coordinates]
-            self.tiles[initial_coordinates] = Tile(tile_type, room_tile_sprites[tile_type], convert_from_grid(initial_coordinates))
+            self.tiles[initial_coordinates] = Tile(tile_type, room_tile_sprites[tile_type],
+                                                   convert_from_grid(initial_coordinates))
 
 
 class Thing:
@@ -137,6 +175,8 @@ class Thing:
         self.coordinates = list(coordinates)
         self.reset()
         self.dimensions = self.current_sprite().get_size()
+        self.all_grid_coordinates = find_all_grid_coordinates(self.coordinates, self.dimensions)
+
 
     def update_sprites(self, speed=4, reset=True):
         self.sprite_count += 1
@@ -158,23 +198,14 @@ class Thing:
         self.sprite_count = 0
         self.sprite_index = 0
 
+    def update_grid_coordinates(self):
+        self.all_grid_coordinates = find_all_grid_coordinates(self.coordinates, self.dimensions)
+
 
 class Tile(Thing):
     def __init__(self, tile_type, sprites, coordinates):
         super().__init__(sprites, coordinates=coordinates)
         self.tile_type = tile_type
-        self.all_grid_coordinates = self.find_all_grid_coordinates()
-
-    def find_all_grid_coordinates(self):
-        start = convert_to_grid(self.coordinates)
-        end = convert_to_grid(combine_lists(combine_lists(self.coordinates, self.dimensions, '+'), (1, 1), '-'))
-        all_coordinates = []
-
-        for x in range(start[0], end[0] + 1):
-            for y in range(start[1], end[1] + 1):
-                all_coordinates.append((x, y))
-
-        return all_coordinates
 
 
 class Mob(Thing):
@@ -193,34 +224,43 @@ class Mob(Thing):
             return pygame.transform.rotate(sprite, 90)
         return sprite
 
+    def combined_coordinates(self):
+        return combine_lists(self.coordinates, self.velocity, '+')
+
+    def process_collision(self, thing):
+        for i in range(2):
+            velocity = [0, 0]
+            velocity[i] = self.velocity[i]
+            print(i, velocity)
+            if collision(combine_lists(self.coordinates, velocity, '+'), self.dimensions,
+                         thing.coordinates, thing.dimensions) is True:
+                print("collided")
+                self.align_velocity(thing, i)
+
+    def align_velocity(self, thing, i):
+        if self.velocity[i] > 0:
+            self.velocity[i] = thing.coordinates[i] - (
+                self.coordinates[i] + self.dimensions[i])
+        elif self.velocity[i] < 0:
+            self.velocity[i] = (thing.coordinates[i] + thing.dimensions[i]) - \
+                               self.coordinates[i]
+
+    def update_grid_coordinates(self, velocity=True):
+        if velocity:
+            coordinates = self.combined_coordinates()
+        else:
+            coordinates = self.coordinates
+        self.all_grid_coordinates = find_all_grid_coordinates(coordinates, self.dimensions)
+
 
 class Player(Mob):
     def __init__(self, sprites, coordinates, movement_keys, movement_speed):
         super().__init__(sprites, coordinates)
         self.movement_keys = movement_keys
         self.movement_speed = movement_speed
-        self.diagonal_movement_speed = self.movement_speed / sqrt(2)
-        print(self.diagonal_movement_speed)
+        self.diagonal_movement_speed = int(self.movement_speed / sqrt(2))
         self.movement_direction = [0, 0]
-
-    def update_coordinates(self):
-        self.coordinates = combine_lists(self.coordinates, self.velocity, '+')
-
-scale_factor = 3
-tile_size = 12
-grid_size = scale_factor * tile_size
-
-screen_dimensions = (1080, 1080)
-display = pygame.display.set_mode(screen_dimensions)
-clock = pygame.time.Clock()
-
-sprite_sheet = SpriteSheet("Sprite_Sheet.png")
-
-player_sprites = sprite_sheet.get_sprites(block_number=4)
-room_tile_sprites = sprite_sheet.get_sprites(block_number=4)
-
-room_map_sheet = SpriteSheet("Level_Map_Sheet.png",)
-room_maps = room_map_sheet.get_sprites(block_number=1, scale=1)
+        self.current_room = None
 
 
 class RoomTileTypes(IntEnum):
@@ -230,11 +270,8 @@ class RoomTileTypes(IntEnum):
     exit = 3
 
 
-room_tile_color_values = {
-    (51, 0): RoomTileTypes.wall,
-    (102, 0): RoomTileTypes.entrance,
-    (153, 0): RoomTileTypes.exit
-}
+class RoomTileClasses(IntEnum):
+    solid = 0
 
 
 class Keys(IntEnum):
@@ -252,17 +289,51 @@ class Directions(IntEnum):
     down = 3
 
 
+scale_factor = 3
+tile_size = 12
+grid_size = scale_factor * tile_size
+game_speed = 30
+
+screen_dimensions = (1080, 1080)
+display = pygame.display.set_mode(screen_dimensions)
+clock = pygame.time.Clock()
+
+sprite_sheet = SpriteSheet("Sprite_Sheet.png")
+
+player_sprites = sprite_sheet.get_sprites(block_number=4)
+room_tile_sprites = sprite_sheet.get_sprites(block_number=4)
+
+room_map_sheet = SpriteSheet("Level_Map_Sheet.png", )
+room_maps = room_map_sheet.get_sprites(block_number=1, scale=1)
+
+room_tile_color_values = {
+    (51, 0): RoomTileTypes.wall,
+    (102, 0): RoomTileTypes.entrance,
+    (153, 0): RoomTileTypes.exit,
+    (204, 0): RoomTileTypes.floor
+}
+
+tile_types = {
+    RoomTileClasses.solid: (RoomTileTypes.wall,)
+}
+
+
 room = Room(room_maps[0])
 room.generate()
 
-player = Player(player_sprites, (100, 100), (K_LEFT, K_UP, K_RIGHT, K_DOWN), 1)
-
+player = Player(player_sprites, (100, 100), (K_LEFT, K_UP, K_RIGHT, K_DOWN), 6)
+player.current_room = room
 
 while True:
     events = pygame.event.get()
     for event in events:
         if event.type == QUIT:
             quit()
+        if event.type == KEYDOWN and event.key == K_z:
+            if game_speed == 30:
+                game_speed = 1
+            else:
+                game_speed = 30
 
     player.velocity = [0, 0]
 
@@ -299,11 +370,22 @@ while True:
 
     for i in range(2):
         if player.movement_direction[i] != 0:
-            print(speed)
             player.velocity[i] = speed * player.movement_direction[i]
 
-    player.update_coordinates()
+    player.update_grid_coordinates()
+    collided_object = None
 
+    for grid_coordinates in player.all_grid_coordinates:
+        tile = player.current_room.tiles[grid_coordinates]
+        if tile.tile_type in tile_types[RoomTileClasses.solid]:
+            if collision(player.combined_coordinates(), player.dimensions, tile.coordinates,
+                         tile.dimensions) is True:
+                collided_object = tile
+                player.process_collision(collided_object)
+
+    player.coordinates = player.combined_coordinates()
+
+    print('cycle')
     display.fill(pygame.Color("white"))
 
     for tile in room.tiles:
@@ -312,7 +394,4 @@ while True:
     display.blit(player.current_sprite(), player.coordinates)
 
     pygame.display.update()
-    clock.tick()
-
-
-
+    clock.tick(game_speed)
