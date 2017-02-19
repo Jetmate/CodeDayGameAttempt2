@@ -1,6 +1,6 @@
 from random import choice
 
-import pygame
+import pygame, math
 from pygame.locals import *
 from enum import IntEnum
 from math import sqrt
@@ -217,7 +217,7 @@ class Mob(Thing):
     def current_sprite(self):
         sprite = super().current_sprite()
         if self.direction == Directions.up:
-            return pygame.transform.rotate(sprite, 270)
+            return pygame.toransform.rotate(sprite, 270)
         elif self.direction == Directions.right:
             return pygame.transform.rotate(sprite, 180)
         elif self.direction == Directions.down:
@@ -261,6 +261,20 @@ class Player(Mob):
         self.diagonal_movement_speed = int(self.movement_speed / sqrt(2))
         self.movement_direction = [0, 0]
         self.current_room = None
+        self.buls = []
+        self.degree = 0
+def pta(x, y, mx, my):
+    if (x > mx):
+        return 3.14 + math.atan((my - y)/(mx - x))
+    else:
+        return math.atan((my - y)/(mx - x))
+class Bullet(Thing):
+    def __init__(self, sprite, coordinates, angle):
+        super().__init__(sprite, coordinates)
+        self.angle = angle
+    def move(self):
+        self.x += math.cos(self.angle) * bul_speed
+        self.y -= math.sin(self.angle) * bul_speed
 
 
 class RoomTileTypes(IntEnum):
@@ -293,6 +307,7 @@ scale_factor = 3
 tile_size = 12
 grid_size = scale_factor * tile_size
 game_speed = 30
+bul_speed = 8
 
 screen_dimensions = (1080, 1080)
 display = pygame.display.set_mode(screen_dimensions)
@@ -347,6 +362,8 @@ while True:
                 player.direction = Directions.up
             elif event.key == player.movement_keys[Keys.down]:
                 player.direction = Directions.down
+        if event.type == MOUSEBUTTONUP:
+            Player.buls.append(Bullet(bul_sprite, (player.coordinates[0], player.coordinates[1]), pta(player.coordinates[0], player.coordinates[1], event.pos[0], event.pos[1])))
 
     keys = pygame.key.get_pressed()
     if keys[player.movement_keys[Keys.left]]:
@@ -367,7 +384,8 @@ while True:
         speed = player.diagonal_movement_speed
     else:
         speed = player.movement_speed
-
+    for bul in player.buls:
+        bul.move()
     for i in range(2):
         if player.movement_direction[i] != 0:
             player.velocity[i] = speed * player.movement_direction[i]
