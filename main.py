@@ -1,4 +1,4 @@
-from random import choice
+from random import choice, randrange
 
 import pygame, math
 from pygame.locals import *
@@ -60,10 +60,18 @@ def pta(x, y, mx, my):
     else:
         return math.atan((my - y) / (mx - x))
 
+
 def polarity(n):
     if n == 0:
         return n
     return n / abs(n)
+
+
+def raidantodegree(number):
+    return number*180/3.14
+
+def degreetoradian(number):
+    return number*3.14/180
 
 
 def collision(c1, d1, c2, d2, inside_only=False):
@@ -284,7 +292,7 @@ class Player(Mob):
         display.blit(thing.current_sprite(), player.generate_display_coordinates(thing.coordinates))
 
     def shoot(self, pos):
-        player.bullets.append(Bullet(bullet_sprite,  player.coordinates, pta(self.fake_coordinates[0], self.fake_coordinates[1], pos[0], pos[1]), 8))
+        player.bullets.append(Bullet(bullet_sprite,  self.coordinates, pta(self.fake_coordinates[0], self.fake_coordinates[1], pos[0], pos[1]), 8))
 
 
 class Bullet(Thing):
@@ -294,8 +302,24 @@ class Bullet(Thing):
         self.speed = speed
 
     def move(self):
-        self.coordinates[0] += math.cos(self.angle) * bullet_speed
-        self.coordinates[1] += math.sin(self.angle) * bullet_speed
+        self.coordinates[0] += math.cos(self.angle) * self.speed
+        self.coordinates[1] += math.sin(self.angle) * self.speed
+
+
+class Boss(Thing):
+    def __init__(self, sprites, coordinates, bullet_number, bullet_frequency, bullet_speed):
+        super().__init__(sprites, coordinates)
+        self.bullets = []
+        self.bullet_number =  bullet_number
+        self.bullet_frequency = bullet_frequency
+        self.bullet_angle = 360/self.bullet_number
+        self.bullet_speed = bullet_speed
+
+    def shoot(self):
+        angle_offset = randrange(self.bullet_angle)
+        for i in range(self.bullet_number):
+            current_angle = self.bullet_angle * i + angle_offset
+            self.bullets.append(Bullet(boss_ammo_sprite, self.coordinates, degreetoradian(current_angle), self.bullet_speed))
 
 
 class RoomTileTypes(IntEnum):
@@ -322,6 +346,7 @@ tile_size = 12
 grid_size = scale_factor * tile_size
 game_speed = 30
 bullet_speed = 40
+game_tick = 0
 
 screen_dimensions = (900, 900)
 display = pygame.display.set_mode(screen_dimensions)
@@ -331,6 +356,8 @@ sprite_sheet = SpriteSheet("Sprite_Sheet.png")
 player_sprites = sprite_sheet.get_sprites(block_number=4)
 room_tile_sprites = sprite_sheet.get_sprites(block_number=4)
 bullet_sprite = sprite_sheet.get_sprites(y_constant=4, x_constant=(4, 1))
+boss_sprites = sprite_sheet.get_sprites(y_constant=73, x_constant=(80, 1))
+boss_ammo_sprite = sprite_sheet.get_sprites(y_constant=9, x_constant=(9, 1))
 
 room_map_sheet = SpriteSheet("Level_Map_Sheet.png", )
 room_maps = room_map_sheet.get_sprites(y_constant=25, x_constant=(25, 1), scale=1)
@@ -351,6 +378,9 @@ room.generate()
 
 player = Player(player_sprites, (0, 0), (K_LEFT, K_UP, K_RIGHT, K_DOWN), 6)
 player.current_room = room
+
+boss = Boss(boss_sprites, find_center((900, 900), boss_sprites[0].get_size()), 10, 15, 4)
+
 
 while True:
     events = pygame.event.get()
@@ -401,6 +431,9 @@ while True:
     for bullet in player.bullets:
         bullet.move()
 
+    for bullet in boss.bullets:
+        bullet.move()
+
     for i in range(2):
         if player.movement_direction[i] != 0:
             player.velocity[i] = speed * player.movement_direction[i]
@@ -418,16 +451,24 @@ while True:
 
     player.coordinates = player.combined_coordinates()
 
+    if game_tick % boss.bullet_frequency == 0:
+        boss.shoot()
+
     display.fill(pygame.Color("white"))
 
     for tile in room.tiles:
         player.blit(room.tiles[tile])
 
+    player.blit(boss)
+
     for bullet in player.bullets:
         player.blit(bullet)
-        print(bullet.coordinates)
+
+    for bullet in boss.bullets:
+        player.blit(bullet)
 
     display.blit(player.current_sprite(), player.fake_coordinates)
 
     pygame.display.update()
     clock.tick(game_speed)
+    game_tick += 1
