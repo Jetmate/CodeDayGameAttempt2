@@ -54,6 +54,13 @@ def make_tuple(thing):
     return thing
 
 
+def pta(x, y, mx, my):
+    if (x > mx):
+        return 3.14 + math.atan((my - y) / (mx - x))
+    else:
+        return math.atan((my - y) / (mx - x))
+
+
 def collision(c1, d1, c2, d2, inside_only=False):
     d1 = list(d1)
     d2 = list(d2)
@@ -156,9 +163,7 @@ class Room:
         for x in range(self.map_sheet.get_width()):
             for y in range(self.map_sheet.get_height()):
                 tile_color = self.get_color((x, y))
-                print(tile_color)
                 if tile_color[3] == 255:
-                    print(1)
                     formatted_color = (tile_color[0], tile_color[1])
                     if formatted_color in room_tile_color_values:
                         block_type = room_tile_color_values[formatted_color]
@@ -220,19 +225,12 @@ class Tile(Thing):
 
 class Mob(Thing):
     def __init__(self, sprites, coordinates):
-        self.direction = [1, 0]
+        self.rotation = 0
         super().__init__(sprites, coordinates)
         self.velocity = [0, 0]
 
     def current_sprite(self):
-        sprite = super().current_sprite()
-        if self.direction == Directions.up:
-            return pygame.toransform.rotate(sprite, 270)
-        elif self.direction == Directions.right:
-            return pygame.transform.rotate(sprite, 180)
-        elif self.direction == Directions.down:
-            return pygame.transform.rotate(sprite, 90)
-        return sprite
+        return pygame.transform.rotate(super().current_sprite(), self.rotation)
 
     def combined_coordinates(self):
         return combine_lists(self.coordinates, self.velocity, '+')
@@ -241,10 +239,8 @@ class Mob(Thing):
         for i in range(2):
             velocity = [0, 0]
             velocity[i] = self.velocity[i]
-            print(i, velocity)
             if collision(combine_lists(self.coordinates, velocity, '+'), self.dimensions,
                          thing.coordinates, thing.dimensions) is True:
-                print("collided")
                 self.align_velocity(thing, i)
 
     def align_velocity(self, thing, i):
@@ -272,25 +268,31 @@ class Player(Mob):
         self.movement_direction = [0, 0]
         self.current_room = None
         self.fake_coordinates = find_center(screen_dimensions, self.dimensions)
+        self.bullets = []
 
     def generate_display_coordinates(self, coordinates):
         return combine_lists(
             combine_lists(coordinates, self.fake_coordinates, '+'),
             self.coordinates, '-')
-        self.buls = []
-        self.degree = 0
-def pta(x, y, mx, my):
-    if (x > mx):
-        return 3.14 + math.atan((my - y)/(mx - x))
-    else:
-        return math.atan((my - y)/(mx - x))
+
+    def blit(self, thing):
+        display.blit(thing.current_sprite(), player.generate_display_coordinates(thing.coordinates))
+
+    def shoot(self, pos):
+        player.bullets.append(Bullet(bullet_sprite, player.coordinates, (pos[1] - self.coordinates[1]) / (pos[0] - self.coordinates[0]), 10))
+
+
 class Bullet(Thing):
-    def __init__(self, sprite, coordinates, angle):
+    def __init__(self, sprite, coordinates, angle, speed):
         super().__init__(sprite, coordinates)
         self.angle = angle
+        self.speed = speed
+
     def move(self):
-        self.x += math.cos(self.angle) * bul_speed
-        self.y -= math.sin(self.angle) * bul_speed
+        self.coordinates[0] += speed
+        self.coordinates[1] += self.coordinates[0] * self.angle
+        # self.coordinates[0] += math.cos(self.angle) * bul_speed
+        # self.coordinates[1] += math.sin(self.angle) * bul_speed
 
 
 class RoomTileTypes(IntEnum):
@@ -312,13 +314,6 @@ class Keys(IntEnum):
     shoot = 4
 
 
-class Directions(IntEnum):
-    left = 0
-    up = 1
-    right = 2
-    down = 3
-
-
 scale_factor = 3
 tile_size = 12
 grid_size = scale_factor * tile_size
@@ -330,9 +325,9 @@ display = pygame.display.set_mode(screen_dimensions)
 clock = pygame.time.Clock()
 
 sprite_sheet = SpriteSheet("Sprite_Sheet.png")
-
 player_sprites = sprite_sheet.get_sprites(block_number=4)
 room_tile_sprites = sprite_sheet.get_sprites(block_number=4)
+bullet_sprite = sprite_sheet.get_sprites(y_constant=4, x_constant=(4, 1))
 
 room_map_sheet = SpriteSheet("Level_Map_Sheet.png", )
 room_maps = room_map_sheet.get_sprites(block_number=1, scale=1)
@@ -347,7 +342,6 @@ room_tile_color_values = {
 tile_types = {
     RoomTileClasses.solid: (RoomTileTypes.wall,)
 }
-
 
 room = Room(room_maps[0])
 room.generate()
@@ -371,16 +365,15 @@ while True:
     for event in events:
         if event.type == KEYDOWN:
             if event.key == player.movement_keys[Keys.left]:
-                player.direction = Directions.left
+                player.rotation = 0
             elif event.key == player.movement_keys[Keys.right]:
-                player.direction = Directions.right
+                player.rotation = 180
             elif event.key == player.movement_keys[Keys.up]:
-                player.direction = Directions.up
+                player.rotation = 270
             elif event.key == player.movement_keys[Keys.down]:
-                player.direction = Directions.down
+                player.rotation = 90
         if event.type == MOUSEBUTTONUP:
-            Player.buls.append(Bullet(bul_sprite, (player.coordinates[0], player.coordinates[1]), pta(player.coordinates[0], player.coordinates[1], event.pos[0], event.pos[1])))
-
+            player.shoot(event.pos)
     keys = pygame.key.get_pressed()
     if keys[player.movement_keys[Keys.left]]:
         player.movement_direction[0] = -1
@@ -400,8 +393,10 @@ while True:
         speed = player.diagonal_movement_speed
     else:
         speed = player.movement_speed
-    for bul in player.buls:
-        bul.move()
+
+    for bullet in player.bullets:
+        bullet.move()
+
     for i in range(2):
         if player.movement_direction[i] != 0:
             player.velocity[i] = speed * player.movement_direction[i]
@@ -422,7 +417,11 @@ while True:
     display.fill(pygame.Color("white"))
 
     for tile in room.tiles:
-        display.blit(room.tiles[tile].current_sprite(), player.generate_display_coordinates(room.tiles[tile].coordinates))
+        player.blit(room.tiles[tile])
+
+    for bullet in player.bullets:
+        player.blit(bullet)
+        print(bullet.coordinates)
 
     display.blit(player.current_sprite(), player.fake_coordinates)
 
