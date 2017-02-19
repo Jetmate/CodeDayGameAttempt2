@@ -273,7 +273,7 @@ class Mob(Thing):
 
 
 class Player(Mob):
-    def __init__(self, sprites, coordinates, movement_keys, movement_speed):
+    def __init__(self, sprites, coordinates, movement_keys, movement_speed, hp):
         super().__init__(sprites, coordinates)
         self.movement_keys = movement_keys
         self.movement_speed = movement_speed
@@ -282,6 +282,10 @@ class Player(Mob):
         self.current_room = None
         self.fake_coordinates = find_center(screen_dimensions, self.dimensions)
         self.bullets = []
+        self.hp = hp
+        self.hearts = []
+        for i in range(self.hp):
+            self.hearts.append(Thing(heart_sprite, (20 + 40 * i, 20)))
 
     def generate_display_coordinates(self, coordinates):
         return combine_lists(
@@ -303,8 +307,11 @@ class Bullet(Thing):
 
     def move(self):
         self.coordinates[0] += math.cos(self.angle) * self.speed
+        if self.coordinates[0] < -1000 or self.coordinates[0] > 2000:
+            return True
         self.coordinates[1] += math.sin(self.angle) * self.speed
-
+        if self.coordinates[1] < -1000 or self.coordinates[1] > 2000:
+            return True
 
 class Boss(Thing):
     def __init__(self, sprites, coordinates, bullet_number, bullet_frequency, bullet_speed):
@@ -314,12 +321,13 @@ class Boss(Thing):
         self.bullet_frequency = bullet_frequency
         self.bullet_angle = 360/self.bullet_number
         self.bullet_speed = bullet_speed
+        self.center_coordinates = find_center(self.dimensions, (1, 1), self.coordinates)
 
     def shoot(self):
         angle_offset = randrange(self.bullet_angle)
         for i in range(self.bullet_number):
             current_angle = self.bullet_angle * i + angle_offset
-            self.bullets.append(Bullet(boss_ammo_sprite, self.coordinates, degreetoradian(current_angle), self.bullet_speed))
+            self.bullets.append(Bullet(boss_ammo_sprite, self.center_coordinates, degreetoradian(current_angle), self.bullet_speed))
 
 
 class RoomTileTypes(IntEnum):
@@ -358,6 +366,8 @@ room_tile_sprites = sprite_sheet.get_sprites(block_number=4)
 bullet_sprite = sprite_sheet.get_sprites(y_constant=4, x_constant=(4, 1))
 boss_sprites = sprite_sheet.get_sprites(y_constant=73, x_constant=(80, 1))
 boss_ammo_sprite = sprite_sheet.get_sprites(y_constant=9, x_constant=(9, 1))
+heart_sprite = sprite_sheet.get_sprites(y_constant=7, x_constant=(7,1), scale=5)
+boss_heart_bar_container = sprite_sheet.get_sprites(dimensions=)
 
 room_map_sheet = SpriteSheet("Level_Map_Sheet.png", )
 room_maps = room_map_sheet.get_sprites(y_constant=25, x_constant=(25, 1), scale=1)
@@ -376,10 +386,10 @@ tile_types = {
 room = Room(room_maps[0])
 room.generate()
 
-player = Player(player_sprites, (0, 0), (K_LEFT, K_UP, K_RIGHT, K_DOWN), 6)
+player = Player(player_sprites, (0, 0), (K_LEFT, K_UP, K_RIGHT, K_DOWN), 6, 5)
 player.current_room = room
 
-boss = Boss(boss_sprites, find_center((900, 900), boss_sprites[0].get_size()), 10, 15, 4)
+boss = Boss(boss_sprites, find_center((900, 900), boss_sprites[0].get_size()), 10, 10, 4)
 
 
 while True:
@@ -429,10 +439,12 @@ while True:
         speed = player.movement_speed
 
     for bullet in player.bullets:
-        bullet.move()
+        if bullet.move():
+            player.bullets.remove(bullet)
 
     for bullet in boss.bullets:
-        bullet.move()
+        if bullet.move():
+            boss.bullets.remove(bullet)
 
     for i in range(2):
         if player.movement_direction[i] != 0:
@@ -454,18 +466,30 @@ while True:
     if game_tick % boss.bullet_frequency == 0:
         boss.shoot()
 
+    for bullet in boss.bullets:
+        if collision(bullet.coordinates, bullet.dimensions, player.coordinates, player.dimensions) is True:
+            player.hp -= 1
+            del player.hearts[player.hp]
+            boss.bullets.remove(bullet)
+            if player.hp == 0:
+                pygame.quit()
+                quit()
+
     display.fill(pygame.Color("white"))
 
     for tile in room.tiles:
         player.blit(room.tiles[tile])
-
-    player.blit(boss)
 
     for bullet in player.bullets:
         player.blit(bullet)
 
     for bullet in boss.bullets:
         player.blit(bullet)
+
+    player.blit(boss)
+
+    for heart in player.hearts:
+        display.blit(heart.current_sprite(), heart.coordinates)
 
     display.blit(player.current_sprite(), player.fake_coordinates)
 
