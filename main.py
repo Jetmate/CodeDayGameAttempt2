@@ -166,11 +166,11 @@ class Room:
                     else:
                         raise Exception("Unidentified block_color {0} at {1}".format(color, (x, y)))
 
-        for x in (-1, self.map_sheet.get_width()):
-            for y in range(-1, self.map_sheet.get_height() + 1):
+        for x in (-1, self.map_sheet.get_width() - 2):
+            for y in range(-1, self.map_sheet.get_height() - 1):
                 tiles[(x, y)] = RoomTileTypes.wall
-        for y in (-1, self.map_sheet.get_height()):
-            for x in range(self.map_sheet.get_width()):
+        for y in (-1, self.map_sheet.get_height() - 2):
+            for x in range(self.map_sheet.get_width() - 2):
                 tiles[(x, y)] = RoomTileTypes.wall
 
         self.tiles = {}
@@ -187,7 +187,6 @@ class Thing:
         self.reset()
         self.dimensions = self.current_sprite().get_size()
         self.all_grid_coordinates = find_all_grid_coordinates(self.coordinates, self.dimensions)
-
 
     def update_sprites(self, speed=4, reset=True):
         self.sprite_count += 1
@@ -402,7 +401,6 @@ while True:
 
     player.coordinates = player.combined_coordinates()
 
-    print('cycle')
     display.fill(pygame.Color("white"))
 
     for tile in room.tiles:
