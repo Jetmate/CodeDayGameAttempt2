@@ -60,6 +60,11 @@ def pta(x, y, mx, my):
     else:
         return math.atan((my - y) / (mx - x))
 
+def polarity(n):
+    if n == 0:
+        return n
+    return n / abs(n)
+
 
 def collision(c1, d1, c2, d2, inside_only=False):
     d1 = list(d1)
@@ -171,11 +176,11 @@ class Room:
                     else:
                         raise Exception("Unidentified block_color {0} at {1}".format(color, (x, y)))
 
-        for x in (-1, self.map_sheet.get_width() - 2):
-            for y in range(-1, self.map_sheet.get_height() - 1):
+        for x in (-1, self.map_sheet.get_width()):
+            for y in range(-1, self.map_sheet.get_height() +1):
                 tiles[(x, y)] = RoomTileTypes.wall
-        for y in (-1, self.map_sheet.get_height() - 2):
-            for x in range(self.map_sheet.get_width() - 2):
+        for y in (-1, self.map_sheet.get_height()):
+            for x in range(self.map_sheet.get_width()):
                 tiles[(x, y)] = RoomTileTypes.wall
 
         self.tiles = {}
@@ -279,7 +284,7 @@ class Player(Mob):
         display.blit(thing.current_sprite(), player.generate_display_coordinates(thing.coordinates))
 
     def shoot(self, pos):
-        player.bullets.append(Bullet(bullet_sprite, player.coordinates, (pos[1] - self.coordinates[1]) / (pos[0] - self.coordinates[0]), 10))
+        player.bullets.append(Bullet(bullet_sprite,  player.coordinates, pta(self.fake_coordinates[0], self.fake_coordinates[1], pos[0], pos[1]), 8))
 
 
 class Bullet(Thing):
@@ -289,10 +294,8 @@ class Bullet(Thing):
         self.speed = speed
 
     def move(self):
-        self.coordinates[0] += speed
-        self.coordinates[1] += self.coordinates[0] * self.angle
-        # self.coordinates[0] += math.cos(self.angle) * bul_speed
-        # self.coordinates[1] += math.sin(self.angle) * bul_speed
+        self.coordinates[0] += math.cos(self.angle) * bullet_speed
+        self.coordinates[1] += math.sin(self.angle) * bullet_speed
 
 
 class RoomTileTypes(IntEnum):
@@ -318,9 +321,9 @@ scale_factor = 3
 tile_size = 12
 grid_size = scale_factor * tile_size
 game_speed = 30
-bul_speed = 8
+bullet_speed = 40
 
-screen_dimensions = (1080, 1080)
+screen_dimensions = (900, 900)
 display = pygame.display.set_mode(screen_dimensions)
 clock = pygame.time.Clock()
 
@@ -330,7 +333,7 @@ room_tile_sprites = sprite_sheet.get_sprites(block_number=4)
 bullet_sprite = sprite_sheet.get_sprites(y_constant=4, x_constant=(4, 1))
 
 room_map_sheet = SpriteSheet("Level_Map_Sheet.png", )
-room_maps = room_map_sheet.get_sprites(block_number=1, scale=1)
+room_maps = room_map_sheet.get_sprites(y_constant=25, x_constant=(25, 1), scale=1)
 
 room_tile_color_values = {
     (51, 0): RoomTileTypes.wall,
@@ -373,7 +376,8 @@ while True:
             elif event.key == player.movement_keys[Keys.down]:
                 player.rotation = 90
         if event.type == MOUSEBUTTONUP:
-            player.shoot(event.pos)
+            player.shoot(pygame.mouse.get_pos())
+
     keys = pygame.key.get_pressed()
     if keys[player.movement_keys[Keys.left]]:
         player.movement_direction[0] = -1
