@@ -44,6 +44,10 @@ def opposite(n):
     return abs(n - 1)
 
 
+def find_center(d1, d2, c1=(0, 0)):
+    return [(c1[i] + (d1[i] / 2 - d2[i] / 2)) for i in range(2)]
+
+
 def make_tuple(thing):
     if type(thing) not in (list, tuple):
         return (thing,)
@@ -162,6 +166,13 @@ class Room:
                     else:
                         raise Exception("Unidentified block_color {0} at {1}".format(color, (x, y)))
 
+        for x in (-1, self.map_sheet.get_width()):
+            for y in range(-1, self.map_sheet.get_height() + 1):
+                tiles[(x, y)] = RoomTileTypes.wall
+        for y in (-1, self.map_sheet.get_height()):
+            for x in range(self.map_sheet.get_width()):
+                tiles[(x, y)] = RoomTileTypes.wall
+
         self.tiles = {}
         for initial_coordinates in tiles:
             tile_type = tiles[initial_coordinates]
@@ -261,6 +272,12 @@ class Player(Mob):
         self.diagonal_movement_speed = int(self.movement_speed / sqrt(2))
         self.movement_direction = [0, 0]
         self.current_room = None
+        self.fake_coordinates = find_center(screen_dimensions, self.dimensions)
+
+    def generate_display_coordinates(self, coordinates):
+        return combine_lists(
+            combine_lists(coordinates, self.fake_coordinates, '+'),
+            self.coordinates, '-')
 
 
 class RoomTileTypes(IntEnum):
@@ -321,7 +338,7 @@ tile_types = {
 room = Room(room_maps[0])
 room.generate()
 
-player = Player(player_sprites, (100, 100), (K_LEFT, K_UP, K_RIGHT, K_DOWN), 6)
+player = Player(player_sprites, (0, 0), (K_LEFT, K_UP, K_RIGHT, K_DOWN), 6)
 player.current_room = room
 
 while True:
@@ -389,9 +406,9 @@ while True:
     display.fill(pygame.Color("white"))
 
     for tile in room.tiles:
-        display.blit(room.tiles[tile].current_sprite(), room.tiles[tile].coordinates)
+        display.blit(room.tiles[tile].current_sprite(), player.generate_display_coordinates(room.tiles[tile].coordinates))
 
-    display.blit(player.current_sprite(), player.coordinates)
+    display.blit(player.current_sprite(), player.fake_coordinates)
 
     pygame.display.update()
     clock.tick(game_speed)
